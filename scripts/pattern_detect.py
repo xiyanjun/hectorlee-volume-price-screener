@@ -315,6 +315,35 @@ def detect_pattern(bars: List[Bar], code: str = "", params: Optional[Dict[str, A
     base = min_low if min_low > 0 else 1
     amplitude = (max_high - min_low) / base * 100.0
 
+    # ═══ V3.6: 自适应进攻型振幅阈值 ═══
+    # 当趋势斜率陡峭时，自动放宽振幅上限（进攻型股票振幅天然更大）
+    adaptive_amp_max = amp_max
+    if len(bars) >= 20:
+        closes_all = [b.close for b in bars]
+        n_all = len(closes_all)
+        # 内联简单SMA
+        ma20 = [0.0] * n_all
+        for i in range(19, n_all):
+            ma20[i] = sum(closes_all[i-19:i+1]) / 20.0
+        ma60 = [0.0] * n_all
+        for i in range(59, n_all):
+            ma60[i] = sum(closes_all[i-59:i+1]) / 60.0
+
+        if ma20[-1] > 0:
+            ma20_slope = (ma20[-1] - ma20[-6]) / ma20[-6] * 100 if n_all >= 6 and ma20[-6] > 0 else 0
+            ma60_slope = 0
+            if ma60[-1] > 0 and n_all >= 6 and ma60[-6] > 0:
+                ma60_slope = (ma60[-1] - ma60[-6]) / ma60[-6] * 100
+
+            # MA20陡峭上升(≥1.5%)或MA60上升且MA20逼近MA60 → 进攻型
+            ma20_approaching = (ma60[-1] > 0 and closes_all[-1] > ma60[-1] and
+                                ma20[-1] < ma60[-1] and
+                                (ma60[-1] - ma20[-1]) / ma60[-1] < 0.10)
+
+            if ma20_slope >= 1.0 or (ma60_slope >= 0.3 and ma20_approaching):
+                adaptive_amp_max = max(amp_max, 15.0)
+                # 不打印日志，静默调整
+
     # 区间占比
     in_range = sum(1 for b in post if anchor_low - 1e-9 <= b.close <= anchor_high + 1e-9)
     range_ratio = in_range / post_n
@@ -367,7 +396,7 @@ def detect_pattern(bars: List[Bar], code: str = "", params: Optional[Dict[str, A
     # V3.5 变体E: 蓄力突破（pre_surge≥5日 + 标准形态）
     # ============================================================
     if has_shrink and pre_surge_days_cnt >= 5:
-        variant_e = _try_variant_e(anchor, post, post_n, amplitude, amp_max, p,
+        variant_e = _try_variant_e(anchor, post, post_n, amplitude, adaptive_amp_max, p,
                                    pre_surge_days_cnt, range_ratio, above_ratio)
         if variant_e is not None:
             result = _finalize_result(
@@ -382,7 +411,7 @@ def detect_pattern(bars: List[Bar], code: str = "", params: Optional[Dict[str, A
     # 阶段3 变体C: 回踩确认（需要缩量）
     # ============================================================
     if has_shrink:
-        variant_c = _try_variant_c(anchor, post, post_n, amplitude, amp_max, p)
+        variant_c = _try_variant_c(anchor, post, post_n, amplitude, adaptive_amp_max, p)
         if variant_c is not None:
             return _finalize_result(
                 variant_c, bars, anchor_idx, n, window, p,
@@ -394,7 +423,7 @@ def detect_pattern(bars: List[Bar], code: str = "", params: Optional[Dict[str, A
     # 阶段3 变体B: 高位平台（需要缩量）
     # ============================================================
     if has_shrink:
-        variant_b = _try_variant_b(anchor, post, post_n, amplitude, amp_max,
+        variant_b = _try_variant_b(anchor, post, post_n, amplitude, adaptive_amp_max,
                                    above_ratio, avg_close, p)
         if variant_b is not None:
             return _finalize_result(
@@ -407,7 +436,7 @@ def detect_pattern(bars: List[Bar], code: str = "", params: Optional[Dict[str, A
     # 阶段3 变体A: 标准横盘（需要缩量）
     # ============================================================
     if has_shrink:
-        variant_a = _try_variant_a(anchor, post, post_n, amplitude, amp_max,
+        variant_a = _try_variant_a(anchor, post, post_n, amplitude, adaptive_amp_max,
                                    range_ratio, range_ratio_min, p)
         if variant_a is not None:
             return _finalize_result(

@@ -198,6 +198,15 @@ def score_pattern(result: PatternResult,
     # ---------- V3.5 权重校准（基于回测特征重要性动态调整） ----------
     sr.total = round(_calibrate_weight(raw_total, result, sr), 1)
 
+    # ═══ V3.7: 背离预警扣分（横盘期放量滞涨=出货嫌疑） ═══
+    sr.divergence_penalty = 0
+    if result.divergence_warning:
+        sr.divergence_penalty = -10.0
+        sr.total = round(sr.total + sr.divergence_penalty, 1)
+        if not hasattr(sr, 'details'):
+            sr.details = {}
+        sr.details['divergence_penalty'] = sr.divergence_penalty
+
     # ---------- 分层（V3.5: 130分制） ----------
     if sr.total >= 100:
         sr.level = "强势形态"

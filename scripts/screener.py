@@ -43,8 +43,8 @@ def color_pct(pct: float) -> str:
 
 def print_header(params: dict = None):
     p = params or DEFAULT_PARAMS
-    print(f"\n{BOLD}═══ 纯量价形态选股 V3.5（放量→缩量→6变体+多因子+多周期+行业共振）═══{RESET}")
-    print(f"{GRAY}窗口: {p['window']}日 | 6变体(D/E/C/B/A/R) | 振幅≤{p['amp_max']}%{RESET}")
+    print(f"\n{BOLD}═══ 纯量价形态选股 V3.7（放量→缩量→6变体+多因子+多周期+行业共振）═══{RESET}")
+    print(f"{GRAY}窗口: {p['window']}日 | 6变体(D/E/C/B/A/R) | 振幅≤{p['amp_max']}%{GRAY}(趋势斜率陡峭时自适应放宽至15%){RESET}")
     print(f"{GRAY}主板3-5%分档 | 创业6%+2.0 | 科创4%+2.0 | 北交5%+3.0 | 曝光度:近50日上榜次数{RESET}\n")
 
 
@@ -160,7 +160,8 @@ def print_result(entry: dict, detail: bool = False):
     print(line)
 
     if r.divergence_warning:
-        print(f"    {YELLOW}⚠ 背离预警：横盘期出现放量滞涨（出货嫌疑）{RESET}")
+        penalty = s.details.get('divergence_penalty', -10)
+        print(f"    {YELLOW}⚠ 背离预警：横盘期出现放量滞涨（出货嫌疑） {penalty:.0f}分{RESET}")
 
     if detail:
         d = s.details
@@ -219,7 +220,8 @@ def print_result(entry: dict, detail: bool = False):
 
 
 def run_scan(codes_names: List[tuple], params: dict, top: int = 20, detail: bool = False,
-             exclude_bj: bool = True, market_state: str = "", ml_model: Optional[dict] = None):
+             exclude_bj: bool = True, market_state: str = "", ml_model: Optional[dict] = None,
+             to_json: bool = False):
     """执行扫描：codes_names = [(code, name), ...]"""
     codes = [c for c, _ in codes_names]
     name_map = dict(codes_names)
@@ -303,6 +305,19 @@ def run_scan(codes_names: List[tuple], params: dict, top: int = 20, detail: bool
         if len(excluded) > 10:
             print(f"  {GRAY}... 等 {len(excluded)} 只{RESET}")
 
+    # JSON 输出
+    if to_json:
+        json_out = {
+            "hits": [{"code": e["code"], "name": e["name"], "variant": e["result"].pattern_variant,
+                      "score": e["score"].total, "anchor_date": e["result"].anchor_date,
+                      "divergence": e["result"].divergence_warning}
+                     for e in hits],
+            "total_hits": len(hits),
+            "excluded_count": len(excluded),
+        }
+        print(f"\n--- JSON ---")
+        print(json.dumps(json_out, ensure_ascii=False, indent=2))
+
     t2 = time.time()
     print(f"\n{GRAY}总耗时 {t2-t0:.1f}s{RESET}")
 
@@ -318,6 +333,7 @@ def main():
     ap.add_argument("--params", help="覆盖参数 JSON，如 '{\"window\":30}'")
     ap.add_argument("--adaptive", action="store_true", help="启用市场波动率参数自适应")
     ap.add_argument("--model", help="ML概率模型路径(.pkl)，启用ML排序")
+    ap.add_argument("--json", action="store_true", help="输出JSON格式")
     args = ap.parse_args()
 
     params = dict(DEFAULT_PARAMS)
@@ -375,7 +391,8 @@ def main():
         sys.exit(1)
 
     run_scan(codes_names, params, top=args.top, detail=args.detail,
-             exclude_bj=not args.include_bj, market_state=market_state, ml_model=ml_model)
+             exclude_bj=not args.include_bj, market_state=market_state, ml_model=ml_model,
+             to_json=args.json)
 
 
 if __name__ == "__main__":
