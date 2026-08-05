@@ -198,8 +198,8 @@ def _get_all_from_eastmoney(include_bj: bool) -> List[dict]:
                 if not include_bj and (code.startswith(("4", "8", "920"))):
                     continue
                 stocks.append(_make_entry(code, name))
-            if page_count < 100:
-                break   # 最后一页
+            if len(diff) < 100:
+                break   # 最后一页（用原始响应数量，排除去重导致的误判）
         return stocks
     except Exception as e:
         print(f"[Data] 东财全市场列表失败: {e}")

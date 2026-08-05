@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """
-盘中监控模块 V3.4
+盘中监控模块 V3.5
 ==================
 基于通达信 5 分钟 K 线，实时检测盘中放量突破信号。
+
+V3.5 更新:
+- MCP 连接预检：启动时测试连接，失败立即报错不再静默扫描
+- 量比阈值修正：盘中尾段/头段比使用日线阈值的60%（最低1.2x）
+- 错误统计：扫描完成后报告 MCP 调用失败数及错误率
 
 两种模式:
   1. 预检模式(--today): 全市场扫描，检查今日是否出现新的放量锚点
@@ -29,9 +34,36 @@ from colors import RED, GREEN, YELLOW, CYAN, GRAY, BOLD, RESET
 from mcp_utils import McpClient
 
 
+# MCP 错误追踪（跨线程共享）
+_mcp_error_count = 0
+_mcp_error_msg = None
+
+
 def _call_mcp(name: str, args: dict) -> Optional[dict]:
     """调用 MCP 工具"""
-    return McpClient.get().call_tool(name, args)
+    global _mcp_error_count, _mcp_error_msg
+    result = McpClient.get().call_tool(name, args)
+    if result and result.get("raw_text", "").startswith("Error:"):
+        if _mcp_error_msg is None:
+            _mcp_error_msg = result["raw_text"]
+        _mcp_error_count += 1
+        return None
+    return result
+
+
+def _check_mcp_health() -> bool:
+    """预检 MCP 连接状态，失败时打印诊断信息"""
+    result = _call_mcp("tdx-connector_tdx_kline", {
+        "code": "600406", "setcode": "1", "period": "1", "wantNum": 1,
+    })
+    if result is None:
+        print(f"{YELLOW}⚠ MCP 连接失败: {_mcp_error_msg or '工具不可用或无响应'}{RESET}")
+        print(f"{YELLOW}  请确认通达信 connector 已在 WorkBuddy 中连接并启用{RESET}")
+        return False
+    if "Rows" not in result or not result["Rows"]:
+        print(f"{YELLOW}⚠ 通达信 K 线数据为空，盘中监控无法继续{RESET}")
+        return False
+    return True
 
 
 def get_intraday_bars(code: str, setcode: str = "1", count: int = 48) -> Optional[List[dict]]:
@@ -111,8 +143,11 @@ def check_today_anchor(code: str, setcode: str, params: dict) -> Optional[dict]:
 
     # 阈值：不传avg_vol（避免分档误判），用纯板块阈值
     rise_th, vol_th = get_rise_threshold(code, params)
+    # V3.5 fix: 盘中量比（尾段/头段）天然低于日线量比（今日/20日均量），
+    # 将阈值降至原始日线阈值的60%（最低1.2x）
+    intraday_vol_th = max(1.2, vol_th * 0.6)
 
-    if surge_pct >= rise_th - 1e-9 and vol_ratio >= vol_th - 1e-9:
+    if surge_pct >= rise_th - 1e-9 and vol_ratio >= intraday_vol_th - 1e-9:
         return {
             "code": code,
             "surge_pct": surge_pct,
@@ -134,13 +169,20 @@ def color_pct(pct: float) -> str:
 
 def run_today_scan(top: int = 20):
     """全市场盘中预检：检查哪些股票今日出现放量"""
+    global _mcp_error_count, _mcp_error_msg
+
+    # V3.5: 预检 MCP 连接
+    if not _check_mcp_health():
+        return
+
     stocks = get_all_stocks(include_bj=False, include_star=True)
     codes = [(s["pure_code"], s["code"], s["name"]) for s in stocks]
 
-    print(f"\n{BOLD}═══ 盘中监控 V3.4 — 今日放量预检（{len(codes)}只）═══{RESET}\n")
+    print(f"\n{BOLD}═══ 盘中监控 V3.5 — 今日放量预检（{len(codes)}只）═══{RESET}\n")
 
     params = dict(DEFAULT_PARAMS)
     alerts = []
+    error_count = 0
 
     # 分批检测（每批 50 只，避免 MCP 过载）
     batch_size = 50
@@ -162,13 +204,19 @@ def run_today_scan(top: int = 20):
                         result["full_code"] = full
                         alerts.append(result)
                 except Exception:
-                    pass
+                    error_count += 1
                 total += 1
 
         elapsed = min(i + batch_size, len(codes))
-        print(f"\r{GRAY}  扫描进度: {elapsed}/{len(codes)}  命中: {len(alerts)}{RESET}", end="")
+        print(f"\r{GRAY}  扫描进度: {elapsed}/{len(codes)}  命中: {len(alerts)}"
+              f"{f'  错误: {_mcp_error_count}' if _mcp_error_count > 0 else ''}{RESET}", end="")
 
     print()
+    if _mcp_error_count > 0:
+        print(f"{YELLOW}⚠ MCP 调用失败 {_mcp_error_count} 次 ({_mcp_error_count/total*100:.1f}%){RESET}")
+        if _mcp_error_count / total > 0.5:
+            print(f"{YELLOW}  错误率过高，结果不可信。请检查通达信 connector 连接状态{RESET}")
+
     if not alerts:
         print(f"{GRAY}今日盘中暂无符合阈值的放量信号{RESET}")
         return
