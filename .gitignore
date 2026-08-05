@@ -1,0 +1,24 @@
+# Data files (large, auto-generated)
+data/kline_cache.pkl
+data/ml_samples.jsonl
+data/ml_samples_small.jsonl
+data/signals_*.json
+data/intraday_log_*.txt
+data/prev_decisions.json
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temp
+*.tmp
+*.swp
