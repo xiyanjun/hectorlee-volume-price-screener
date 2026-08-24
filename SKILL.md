@@ -115,12 +115,14 @@ python screener.py --all --params '{"vol_ratio_min":2.0}' --include-bj
 | 11:35 | 午间小结 | 上午最强板块 + 异动 + 下午建议 |
 | 13:30 | 午后监控 | 午后新放量信号 + 上午强势延续性 |
 | 14:45 | 尾盘突击 | 尾盘放量突破 + 跳水预警 + 明日方向 |
-| 15:05 | 收盘全量 | 全扫描 + 板块分析 + 操作建议 |
+| 16:05 | 收盘全量 | 全扫描 + 板块分析 + 操作建议（16:00 后 hithink 库已同步当日数据） |
 
 ### 防污染设计
 - 盘中 6 次扫描写入 `intraday_log`，**不干扰关注池曝光度**
-- 仅 15:05 收盘扫描写入 `signals_YYYYMMDD.json`
+- 仅 16:05 收盘扫描写入 `signals_YYYYMMDD.json`
 - 曝光度读取同日去重（同一天同一股票只计 1 次）
+
+> **收盘扫描时间说明**：收盘全量扫描从 15:05 推迟到 **16:05**，等待 hithink 本地库 16:00 自动同步当日数据（否则 15:00–16:00 之间运行拿到的日K是 T-1，会漏当日形态信号）。已配置为 WorkBuddy automation「VPS 收盘全量扫描」（工作日 16:05）。
 
 ---
 
@@ -140,13 +142,21 @@ python screener.py --all --params '{"vol_ratio_min":2.0}' --include-bj
 
 ## 数据源
 
-| 数据 | 来源 | 说明 |
+> **V3.7 修复（2026-08-24）**：腾讯 K 线公开接口（`ifzq.gtimg.cn`）有腾讯云 WAF 反爬，高频抓取（全市场 5000+ 只）会触发 501 拦截；东财列表接口需系统 Clash 代理且不稳定。现改为 **hithink 本地 DuckDB 库优先**（官方同花顺前复权日K，本地文件读取，无网络/无 WAF/无限流），腾讯接口仅作 fallback。详见 `scripts/hithink_provider.py`。
+
+| 数据 | 来源（优先级） | 说明 |
 |:-----|:-----|:-----|
-| 全市场列表 | 东财 `push2.eastmoney.com` → 腾讯 → TDX 补充 | ~5191 只 |
-| 日 K 线 | 腾讯 `ifzq.gtimg.cn` + TDX fallback | 90 根，前复权 |
-| 实时行情 | 腾讯 `qt.gtimg.cn` | 换手率/名称/ST |
-| 5 分钟 K 线 | 通达信 MCP `period="0"` | 盘中监控 |
-| 周线 K 线 | 通达信 MCP `period="5"` | 多周期确认 |
+| 全市场列表 | **hithink 本地库** → 腾讯排行 `proxy.finance.qq.com` → 东财 | ~5211 只（默认不含北交所）；`--include-bj` 时含北交所 338 只（920 新代码段） |
+| 日 K 线 | **hithink 本地库**（`v_daily_qfq` 前复权）→ 腾讯 `web.ifzq.gtimg.cn` → TDX | 90 根，前复权 |
+| 实时行情 | 腾讯 `qt.gtimg.cn`（逗号批量，每批 60 只） | 换手率/名称/ST，支持 920 北交所 |
+| 周线 K 线 | **hithink 本地库日线 ISO 周聚合** → TDX | 多周期确认（替代原 TDX 周线） |
+| 5 分钟 K 线 | 通达信 MCP `period="0"` | 盘中监控（仍依赖 TDX） |
+
+**北交所说明**：北交所代码为 920 新段（`_normalize_code` 已修复「920 误判为沪B股」的 bug），K 线/行情/周线均由 hithink 本地库+腾讯行情覆盖，无需 TDX。北交所形态阈值 5% 涨幅 + 3.0 量比（高量过滤噪声）。
+
+**hithink 本地库依赖**：需安装 `duckdb`（`pip install duckdb`）且本地库存在（`~/Library/Application Support/hithink-finance/data/market.duckdb`，由 hithink-finance 每日 16:00 自动同步）。库不可用时自动降级到腾讯接口。
+
+**网络代理说明**：腾讯系接口（qt/ifzq/proxy.finance/smartbox）一律显式直连（`proxies={http:None,https:None}`），绕开环境注入的本地代理（如 `127.0.0.1:59272`），因该代理对腾讯接口不稳定；东财接口需走系统 Clash 代理 `127.0.0.1:7890`。
 
 ---
 

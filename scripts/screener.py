@@ -228,18 +228,22 @@ def run_scan(codes_names: List[tuple], params: dict, top: int = 20, detail: bool
 
     t0 = time.time()
     print(f"{GRAY}正在拉取 {len(codes)} 只股票K线...{RESET}")
-    klines_map = fetch_klines_batch(codes, count=90, workers=12)
-    quotes_map = fetch_quotes_batch(codes, workers=12)
+    klines_map = fetch_klines_batch(codes, count=90, workers=8)
+    quotes_map = fetch_quotes_batch(codes, workers=8)
     t1 = time.time()
     print(f"{GRAY}数据拉取完成（{t1-t0:.1f}s），开始形态识别...{RESET}")
 
     hits, excluded = [], []
     for code, kl in klines_map.items():
         name = name_map.get(code, "")
+        q = quotes_map.get(code)
+        # V3.7 修复：hithink 本地库列表不含 name，用腾讯行情补齐（ST 过滤依赖 name）
+        if not name and q:
+            name = q.get("name", "")
         if kl is None or len(kl) < 60:
             excluded.append((code, name, "数据获取失败/K线不足"))
             continue
-        entry = analyze_one(code, name, kl, quotes_map.get(code), params, detail, ml_model=ml_model)
+        entry = analyze_one(code, name, kl, q, params, detail, ml_model=ml_model)
         if entry is None:
             continue
         if entry.get("excluded"):

@@ -403,7 +403,7 @@ def detect_pattern(bars: List[Bar], code: str = "", params: Optional[Dict[str, A
                 variant_e, bars, anchor_idx, n, window, p,
                 shrink_days, shrink_depth, shrink_avg_vol,
                 amplitude, range_ratio, range_position,
-                pullback_ratio, low_point_rise)
+                pullback_ratio, low_point_rise, code)
             result.pre_surge_5d = True
             return result
 
@@ -417,7 +417,7 @@ def detect_pattern(bars: List[Bar], code: str = "", params: Optional[Dict[str, A
                 variant_c, bars, anchor_idx, n, window, p,
                 shrink_days, shrink_depth, shrink_avg_vol,
                 amplitude, range_ratio, range_position,
-                pullback_ratio, low_point_rise)
+                pullback_ratio, low_point_rise, code)
 
     # ============================================================
     # 阶段3 变体B: 高位平台（需要缩量）
@@ -430,7 +430,7 @@ def detect_pattern(bars: List[Bar], code: str = "", params: Optional[Dict[str, A
                 variant_b, bars, anchor_idx, n, window, p,
                 shrink_days, shrink_depth, shrink_avg_vol,
                 amplitude, range_ratio, range_position,
-                pullback_ratio, low_point_rise)
+                pullback_ratio, low_point_rise, code)
 
     # ============================================================
     # 阶段3 变体A: 标准横盘（需要缩量）
@@ -443,7 +443,7 @@ def detect_pattern(bars: List[Bar], code: str = "", params: Optional[Dict[str, A
                 variant_a, bars, anchor_idx, n, window, p,
                 shrink_days, shrink_depth, shrink_avg_vol,
                 amplitude, range_ratio, range_position,
-                pullback_ratio, low_point_rise)
+                pullback_ratio, low_point_rise, code)
 
     return None
 
@@ -661,12 +661,20 @@ def check_weekly_trend(code: str, setcode: str = "1") -> dict:
     except ImportError:
         return {"confirmed": False, "score_bonus": 0, "trend": "数据不可用"}
 
-    # 获取周线K线（TDX period=5 for weekly）
+    # 获取周线K线：优先 hithink 本地库聚合（无 WAF/无网络），失败再 TDX
+    weekly = None
     try:
-        import tdx_data_provider as tdp
-        weekly = tdp.get_tdx_kline(code, setcode, want_num=30)
+        import hithink_provider
+        if hithink_provider.available():
+            weekly = hithink_provider.get_hithink_weekly(code, want_num=30)
     except Exception:
         weekly = None
+    if not weekly:
+        try:
+            import tdx_data_provider as tdp
+            weekly = tdp.get_tdx_kline(code, setcode, want_num=30)
+        except Exception:
+            weekly = None
 
     if not weekly or len(weekly) < 15:
         return {"confirmed": False, "score_bonus": 0, "trend": "周线数据不足"}
@@ -735,8 +743,10 @@ def _finalize_result(result: PatternResult, bars: List[Bar],
                      params: Dict[str, Any],
                      shrink_days: int, shrink_depth: float, shrink_avg_vol: float,
                      amplitude: float, range_ratio: float, range_position: str,
-                     pullback_ratio: float, low_point_rise: bool) -> PatternResult:
+                     pullback_ratio: float, low_point_rise: bool,
+                     code: str = "") -> PatternResult:
     """填充所有共享字段 + 阶段4/趋势分析，返回完整的 PatternResult"""
+    result.code = code
     anchor = bars[anchor_idx]
     result.anchor_idx = anchor_idx
     result.anchor_date = anchor.date
