@@ -1,7 +1,7 @@
 name: hectorlee-volume-price-screener
 slug: hectorlee-volume-price-screener
-version: 3.7.0
-description: "纯量价关系A股选股系统。6种量价形态(D/E/C/B/A/R)+多因子+多周期+行业共振+关注度追踪，135分制评分，全A股覆盖(含科创板/北交所TDX数据源)，7×日定时扫描(09:00~15:05)"
+version: 3.7.1
+description: "纯量价关系A股选股系统。6种量价形态(D/E/C/B/A/R)+多因子+多周期+行业共振+关注度追踪，135分制评分，全A股覆盖(含科创板/北交所TDX数据源)，7×日定时扫描(09:00~15:05)。V3.7.1 接入 hithink 本地 DuckDB 库优先(同花顺前复权日K，无WAF/无限流)，腾讯接口仅作 fallback。"
 category: finance
 author: hectorlee
 license: MIT-0
