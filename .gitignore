@@ -22,3 +22,6 @@ Thumbs.db
 # Temp
 *.tmp
 *.swp
+
+# Local metadata (auto-generated on install)
+_user_meta.json
