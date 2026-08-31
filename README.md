@@ -1,6 +1,6 @@
 # hectorlee-volume-price-screener 量价选股系统
 
-![Version](https://img.shields.io/badge/version-3.7.1-blue) ![License](https://img.shields.io/badge/license-MIT--0-green) ![Python](https://img.shields.io/badge/python-3.10%2B-yellow)
+[![CI](https://github.com/xiyanjun/hectorlee-volume-price-screener/actions/workflows/ci.yml/badge.svg)](https://github.com/xiyanjun/hectorlee-volume-price-screener/actions/workflows/ci.yml) ![Version](https://img.shields.io/badge/version-3.7.1-blue) ![License](https://img.shields.io/badge/license-MIT--0-green) ![Python](https://img.shields.io/badge/python-3.10%2B-yellow)
 
 纯量价关系 A 股选股系统：**6 种量价形态识别 + 130 分制多因子评分 + 多周期确认 + 行业共振 + 关注池曝光度追踪**。纯量价、零基本面依赖，覆盖全 A 股约 5,200 只（沪主板 + 深主板 + 创业板 + 科创板，可选北交所）。
 
